@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { PlayCircle, PauseCircle, Upload, Image as ImageIcon, Music, ZoomIn, ZoomOut, Clock, Sun, Moon, Rewind, RotateCcw } from 'lucide-react'
+import { PlayCircle, PauseCircle, Upload, Image as ImageIcon, Music, ZoomIn, ZoomOut, Clock, Sun, Moon, Rewind, RotateCcw, GripVertical, ChevronUp, ChevronDown } from 'lucide-react'
 import { ImageFilters, Filter, applyFilter } from './image-filters'
 import { motion } from 'framer-motion'
 import { DragDropContext, Droppable, Draggable, DropResult, DroppableProvided, DraggableProvided } from 'react-beautiful-dnd'
@@ -243,19 +243,22 @@ export function VideoEditorComponent() {
 
   const onDragEnd = (result: DropResult) => {
     if (!result.destination) {
-      return
+      return;
     }
 
-    const newImages = Array.from(images)
-    const [reorderedItem] = newImages.splice(result.source.index, 1)
-    newImages.splice(result.destination.index, 0, reorderedItem)
+    const reorderedImages = Array.from(images);
+    const [reorderedItem] = reorderedImages.splice(result.source.index, 1);
+    reorderedImages.splice(result.destination.index, 0, reorderedItem);
 
     // Recalculate start times
-    newImages.forEach((img, index) => {
-      img.startTime = index === 0 ? 0 : newImages[index - 1].startTime + newImages[index - 1].duration
-    })
+    let currentStartTime = 0;
+    const updatedImages = reorderedImages.map((image) => {
+      const updatedImage = { ...image, startTime: currentStartTime };
+      currentStartTime += image.duration;
+      return updatedImage;
+    });
 
-    setImages(newImages)
+    setImages(updatedImages);
   }
 
   const exportVideo = async () => {
@@ -295,6 +298,25 @@ export function VideoEditorComponent() {
     a.download = 'output.mp4'
     a.click()
   }
+
+  const moveImage = (index: number, direction: 'up' | 'down') => {
+    const newImages = [...images];
+    if (direction === 'up' && index > 0) {
+      [newImages[index - 1], newImages[index]] = [newImages[index], newImages[index - 1]];
+    } else if (direction === 'down' && index < newImages.length - 1) {
+      [newImages[index], newImages[index + 1]] = [newImages[index + 1], newImages[index]];
+    }
+
+    // Recalculate start times
+    let currentStartTime = 0;
+    const updatedImages = newImages.map((image) => {
+      const updatedImage = { ...image, startTime: currentStartTime };
+      currentStartTime += image.duration;
+      return updatedImage;
+    });
+
+    setImages(updatedImages);
+  };
 
   return (
     <div className={`min-h-screen p-8 ${themeClasses}`}>
@@ -336,19 +358,40 @@ export function VideoEditorComponent() {
                 <CardTitle className={headerClasses}>Edit Timeline</CardTitle>
               </CardHeader>
               <CardContent>
+                <p className="text-sm mb-4">Drag and drop or use arrows to reorder images</p>
                 <DragDropContext onDragEnd={onDragEnd}>
                   <Droppable droppableId="images">
-                    {(provided: DroppableProvided) => (
+                    {(provided) => (
                       <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-4 max-h-96 overflow-y-auto">
                         {images.map((image, index) => (
-                          <Draggable key={index} draggableId={`image-${index}`} index={index}>
-                            {(provided: DraggableProvided) => (
+                          <Draggable key={`image-${index}`} draggableId={`image-${index}`} index={index}>
+                            {(provided) => (
                               <div
                                 ref={provided.innerRef}
                                 {...provided.draggableProps}
-                                {...provided.dragHandleProps}
                                 className={`flex items-center space-x-4 p-4 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-gray-200'}`}
                               >
+                                <div className="flex flex-col items-center mr-2">
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    onClick={() => moveImage(index, 'up')}
+                                    disabled={index === 0}
+                                  >
+                                    <ChevronUp className="w-4 h-4" />
+                                  </Button>
+                                  <div {...provided.dragHandleProps} className="cursor-move my-1">
+                                    <GripVertical className="w-6 h-6" />
+                                  </div>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    onClick={() => moveImage(index, 'down')}
+                                    disabled={index === images.length - 1}
+                                  >
+                                    <ChevronDown className="w-4 h-4" />
+                                  </Button>
+                                </div>
                                 <img src={URL.createObjectURL(image.file)} alt={`Image ${index}`} className="w-20 h-20 object-cover rounded" />
                                 <div className="flex-grow space-y-2">
                                   <Select value={image.effect} onValueChange={(value) => updateImageEffect(index, value as Effect)}>
