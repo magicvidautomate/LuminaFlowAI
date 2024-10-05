@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { PlayCircle, PauseCircle, Upload, Image as ImageIcon, Music, ZoomIn, ZoomOut, Clock, Sun, Moon } from 'lucide-react'
+import { PlayCircle, PauseCircle, Upload, Image as ImageIcon, Music, ZoomIn, ZoomOut, Clock, Sun, Moon, Rewind, RotateCcw } from 'lucide-react'
 import { ImageFilters, Filter, applyFilter } from './image-filters'
 
 type Effect = 'none' | 'zoom-in' | 'zoom-out' | 'fade'
@@ -165,6 +165,21 @@ export function VideoEditorComponent() {
     }
   }
 
+  const rewindPreview = () => {
+    const newTime = Math.max(0, currentTime - 5) // Rewind by 5 seconds
+    setCurrentTime(newTime)
+    if (audio) {
+      audio.currentTime = newTime
+    }
+  }
+
+  const rewindToStart = () => {
+    setCurrentTime(0)
+    if (audio) {
+      audio.currentTime = 0
+    }
+  }
+
   const totalDuration = images.reduce((sum, img) => Math.max(sum, img.startTime + img.duration), 0)
 
   const toggleTheme = () => {
@@ -309,6 +324,14 @@ export function VideoEditorComponent() {
                   <div className="relative">
                     <canvas ref={canvasRef} width={640} height={360} className={`w-full h-auto border rounded-lg shadow-lg ${isDarkMode ? 'border-gray-600' : 'border-gray-300'}`} />
                     <div className="absolute bottom-4 left-4 right-4 flex justify-center space-x-4">
+                      <Button onClick={rewindToStart} size="icon" variant="secondary" className={buttonClasses}>
+                        <RotateCcw className="w-6 h-6" />
+                        <span className="sr-only">Rewind to Start</span>
+                      </Button>
+                      <Button onClick={rewindPreview} size="icon" variant="secondary" className={buttonClasses}>
+                        <Rewind className="w-6 h-6" />
+                        <span className="sr-only">Rewind</span>
+                      </Button>
                       <Button onClick={playPreview} size="icon" variant="secondary" className={buttonClasses}>
                         <PlayCircle className="w-6 h-6" />
                         <span className="sr-only">Play</span>
