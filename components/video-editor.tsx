@@ -10,6 +10,10 @@ import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PlayCircle, PauseCircle, Upload, Image as ImageIcon, Music, ZoomIn, ZoomOut, Clock, Sun, Moon, Rewind, RotateCcw } from 'lucide-react'
 import { ImageFilters, Filter, applyFilter } from './image-filters'
+import { motion } from 'framer-motion'
+import { DragDropContext, Droppable, Draggable, DropResult, DroppableProvided, DraggableProvided } from 'react-beautiful-dnd'
+import { FFmpeg } from '@ffmpeg/ffmpeg'
+import { fetchFile } from '@ffmpeg/util'
 
 type Effect = 'none' | 'zoom-in' | 'zoom-out' | 'fade'
 
@@ -204,6 +208,94 @@ export function VideoEditorComponent() {
     ? "bg-blue-600 hover:bg-blue-700 text-white"
     : "bg-blue-500 hover:bg-blue-600 text-white"
 
+  const Timeline = () => {
+    const timelineScale = 100 // pixels per second
+
+    return (
+      <div className="relative h-20 mt-4 overflow-x-auto">
+        <div className="absolute top-0 left-0 h-full" style={{ width: `${totalDuration * timelineScale}px` }}>
+          {images.map((image, index) => (
+            <motion.div
+              key={index}
+              className={`absolute h-12 rounded ${isDarkMode ? 'bg-blue-600' : 'bg-blue-400'}`}
+              style={{
+                left: `${image.startTime * timelineScale}px`,
+                width: `${image.duration * timelineScale}px`,
+              }}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              <img
+                src={URL.createObjectURL(image.file)}
+                alt={`Thumbnail ${index}`}
+                className="h-full w-full object-cover rounded"
+              />
+            </motion.div>
+          ))}
+          <div
+            className={`absolute top-0 w-0.5 h-full bg-red-500`}
+            style={{ left: `${currentTime * timelineScale}px` }}
+          />
+        </div>
+      </div>
+    )
+  }
+
+  const onDragEnd = (result: DropResult) => {
+    if (!result.destination) {
+      return
+    }
+
+    const newImages = Array.from(images)
+    const [reorderedItem] = newImages.splice(result.source.index, 1)
+    newImages.splice(result.destination.index, 0, reorderedItem)
+
+    // Recalculate start times
+    newImages.forEach((img, index) => {
+      img.startTime = index === 0 ? 0 : newImages[index - 1].startTime + newImages[index - 1].duration
+    })
+
+    setImages(newImages)
+  }
+
+  const exportVideo = async () => {
+    const ffmpeg = new FFmpeg()
+    await ffmpeg.load()
+
+    // Write images to FFmpeg virtual file system
+    for (let i = 0; i < images.length; i++) {
+      const imageData = await fetchFile(images[i].file)
+      await ffmpeg.writeFile(`image${i}.png`, imageData)
+    }
+
+    // Create FFmpeg command
+    let command = '-framerate 30 '
+    for (let i = 0; i < images.length; i++) {
+      command += `-loop 1 -t ${images[i].duration} -i image${i}.png `
+    }
+    command += '-filter_complex "'
+    for (let i = 0; i < images.length; i++) {
+      command += `[${i}:v]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1,fade=t=in:st=0:d=1,fade=t=out:st=${images[i].duration - 1}:d=1[v${i}]; `
+    }
+    for (let i = 0; i < images.length; i++) {
+      command += `[v${i}]`
+    }
+    command += `concat=n=${images.length}:v=1:a=0,format=yuv420p[v]" -map "[v]" output.mp4`
+
+    // Run FFmpeg command
+    await ffmpeg.exec(command.split(' '))
+
+    // Read the output file
+    const data = await ffmpeg.readFile('output.mp4')
+
+    // Create a download link
+    const url = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'output.mp4'
+    a.click()
+  }
+
   return (
     <div className={`min-h-screen p-8 ${themeClasses}`}>
       <div className={`container mx-auto backdrop-blur-sm rounded-xl shadow-lg p-8 ${cardClasses}`}>
@@ -244,72 +336,88 @@ export function VideoEditorComponent() {
                 <CardTitle className={headerClasses}>Edit Timeline</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4 max-h-96 overflow-y-auto">
-                  {images.map((image, index) => (
-                    <div key={index} className={`flex items-center space-x-4 p-4 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-gray-200'}`}>
-                      <img src={URL.createObjectURL(image.file)} alt={`Image ${index}`} className="w-20 h-20 object-cover rounded" />
-                      <div className="flex-grow space-y-2">
-                        <Select value={image.effect} onValueChange={(value) => updateImageEffect(index, value as Effect)}>
-                          <SelectTrigger className={inputClasses}>
-                            <SelectValue placeholder="Effect" />
-                          </SelectTrigger>
-                          <SelectContent className={inputClasses}>
-                            <SelectItem value="none">
-                              <span className="flex items-center">
-                                <ImageIcon className="w-4 h-4 mr-2" />
-                                None
-                              </span>
-                            </SelectItem>
-                            <SelectItem value="zoom-in">
-                              <span className="flex items-center">
-                                <ZoomIn className="w-4 h-4 mr-2" />
-                                Zoom In
-                              </span>
-                            </SelectItem>
-                            <SelectItem value="zoom-out">
-                              <span className="flex items-center">
-                                <ZoomOut className="w-4 h-4 mr-2" />
-                                Zoom Out
-                              </span>
-                            </SelectItem>
-                            <SelectItem value="fade">
-                              <span className="flex items-center">
-                                <ImageIcon className="w-4 h-4 mr-2" />
-                                Fade
-                              </span>
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <ImageFilters
-                          filter={image.filter}
-                          onFilterChange={(filter) => updateImageFilter(index, filter)}
-                          inputClasses={inputClasses}
-                        />
-                        <div className="flex items-center space-x-2">
-                          <Clock className="w-4 h-4" />
-                          <Input
-                            type="number"
-                            value={image.startTime}
-                            onChange={(e) => updateImageStartTime(index, parseFloat(e.target.value))}
-                            min={0}
-                            step={0.1}
-                            className={`w-20 ${inputClasses}`}
-                          />
-                          <span>to</span>
-                          <Input
-                            type="number"
-                            value={image.startTime + image.duration}
-                            onChange={(e) => updateImageDuration(index, parseFloat(e.target.value) - image.startTime)}
-                            min={image.startTime + 0.1}
-                            step={0.1}
-                            className={`w-20 ${inputClasses}`}
-                          />
-                          <span>s</span>
-                        </div>
+                <DragDropContext onDragEnd={onDragEnd}>
+                  <Droppable droppableId="images">
+                    {(provided: DroppableProvided) => (
+                      <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-4 max-h-96 overflow-y-auto">
+                        {images.map((image, index) => (
+                          <Draggable key={index} draggableId={`image-${index}`} index={index}>
+                            {(provided: DraggableProvided) => (
+                              <div
+                                ref={provided.innerRef}
+                                {...provided.draggableProps}
+                                {...provided.dragHandleProps}
+                                className={`flex items-center space-x-4 p-4 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-gray-200'}`}
+                              >
+                                <img src={URL.createObjectURL(image.file)} alt={`Image ${index}`} className="w-20 h-20 object-cover rounded" />
+                                <div className="flex-grow space-y-2">
+                                  <Select value={image.effect} onValueChange={(value) => updateImageEffect(index, value as Effect)}>
+                                    <SelectTrigger className={inputClasses}>
+                                      <SelectValue placeholder="Effect" />
+                                    </SelectTrigger>
+                                    <SelectContent className={inputClasses}>
+                                      <SelectItem value="none">
+                                        <span className="flex items-center">
+                                          <ImageIcon className="w-4 h-4 mr-2" />
+                                          None
+                                        </span>
+                                      </SelectItem>
+                                      <SelectItem value="zoom-in">
+                                        <span className="flex items-center">
+                                          <ZoomIn className="w-4 h-4 mr-2" />
+                                          Zoom In
+                                        </span>
+                                      </SelectItem>
+                                      <SelectItem value="zoom-out">
+                                        <span className="flex items-center">
+                                          <ZoomOut className="w-4 h-4 mr-2" />
+                                          Zoom Out
+                                        </span>
+                                      </SelectItem>
+                                      <SelectItem value="fade">
+                                        <span className="flex items-center">
+                                          <ImageIcon className="w-4 h-4 mr-2" />
+                                          Fade
+                                        </span>
+                                      </SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                  <ImageFilters
+                                    filter={image.filter}
+                                    onFilterChange={(filter) => updateImageFilter(index, filter)}
+                                    inputClasses={inputClasses}
+                                  />
+                                  <div className="flex items-center space-x-2">
+                                    <Clock className="w-4 h-4" />
+                                    <Input
+                                      type="number"
+                                      value={image.startTime}
+                                      onChange={(e) => updateImageStartTime(index, parseFloat(e.target.value))}
+                                      min={0}
+                                      step={0.1}
+                                      className={`w-20 ${inputClasses}`}
+                                    />
+                                    <span>to</span>
+                                    <Input
+                                      type="number"
+                                      value={image.startTime + image.duration}
+                                      onChange={(e) => updateImageDuration(index, parseFloat(e.target.value) - image.startTime)}
+                                      min={image.startTime + 0.1}
+                                      step={0.1}
+                                      className={`w-20 ${inputClasses}`}
+                                    />
+                                    <span>s</span>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </Draggable>
+                        ))}
+                        {provided.placeholder}
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    )}
+                  </Droppable>
+                </DragDropContext>
               </CardContent>
             </Card>
           </div>
@@ -353,6 +461,10 @@ export function VideoEditorComponent() {
                     <span className="text-sm font-medium w-16">{currentTime.toFixed(1)}s</span>
                   </div>
                 </div>
+                <Timeline />
+                <Button onClick={exportVideo} className={buttonClasses}>
+                  Export Video
+                </Button>
               </CardContent>
             </Card>
           </div>
