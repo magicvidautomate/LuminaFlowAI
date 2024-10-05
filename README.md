@@ -1,78 +1,36 @@
-# LuminaFlowAI
-
-LuminaFlowAI is an open-source, web-based video editor that allows users to create dynamic video sequences using images, audio, and various visual effects. Built with React and Next.js, LuminaFlowAI offers an intuitive interface for crafting engaging visual stories.
-
-## Features
-
-- Image sequencing with customizable durations
-- Audio integration
-- Visual effects (zoom in, zoom out, fade)
-- Real-time preview
-- Responsive design
-- Easy-to-use interface
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
 
-### Prerequisites
+First, run the development server:
 
-- Node.js (version 14.6.0 or newer)
-- npm or Yarn
+```bash
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
+```
 
-### Installation
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-1. Clone the repository:
-   ```
-   git clone https://github.com/puppe1990/LuminaFlowAI.git
-   cd LuminaFlowAI
-   ```
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-2. Install dependencies:
-   ```
-   npm install
-   # or
-   yarn install
-   ```
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
-3. Run the development server:
-   ```
-   npm run dev
-   # or
-   yarn dev
-   ```
+## Learn More
 
-4. Open [http://localhost:3000](http://localhost:3000) in your browser to see the application.
+To learn more about Next.js, take a look at the following resources:
 
-## Usage
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
 
-1. Upload Images: Use the "Upload Images" button to select multiple images for your video sequence.
-2. Add Audio: Upload an audio file to accompany your video.
-3. Edit Timeline: Adjust the duration and effects for each image in the sequence.
-4. Preview: Use the preview panel to watch your creation and make adjustments as needed.
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
-## Contributing
+## Deploy on Vercel
 
-We welcome contributions to LuminaFlowAI! Please read our [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
-## License
-
-This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.
-
-## Acknowledgments
-
-- [Next.js](https://nextjs.org/) - The React framework used
-- [shadcn/ui](https://ui.shadcn.com/) - UI components
-- [Lucide](https://lucide.dev/) - Icons
-- [Radix UI](https://www.radix-ui.com/) - Primitive UI components
-
-## Contact
-
-If you have any questions, feel free to reach out to us at [your-email@example.com](mailto:matheus.puppe@gmail.com).
-
-## Roadmap
-
-- [ ] Add more visual effects
-- [ ] Implement video export functionality
-- [ ] Create mobile-responsive design
-- [ ] Add collaborative editing features
-
-Stay tuned for more updates and features!
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
