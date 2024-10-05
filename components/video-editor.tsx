@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useMemo } from 'react'
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -9,12 +9,14 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PlayCircle, PauseCircle, Upload, Image as ImageIcon, Music, ZoomIn, ZoomOut, Clock, Sun, Moon } from 'lucide-react'
+import { ImageFilters, Filter, applyFilter } from './image-filters'
 
 type Effect = 'none' | 'zoom-in' | 'zoom-out' | 'fade'
 
 type ImageItem = {
   file: File
   effect: Effect
+  filter: Filter
   duration: number
   startTime: number
 }
@@ -51,8 +53,9 @@ export function VideoEditorComponent() {
       const newImages = Array.from(event.target.files).map((file, index) => ({
         file,
         effect: 'none' as Effect,
+        filter: 'none' as Filter,
         duration: 5,
-        startTime: index * 5 // Initialize with sequential start times
+        startTime: index * 5
       }))
       setImages([...images, ...newImages])
     }
@@ -84,6 +87,12 @@ export function VideoEditorComponent() {
     setImages(updatedImages)
   }
 
+  const updateImageFilter = (index: number, filter: Filter) => {
+    const updatedImages = [...images]
+    updatedImages[index].filter = filter
+    setImages(updatedImages)
+  }
+
   const renderPreview = () => {
     if (!canvasRef.current) return
 
@@ -103,17 +112,16 @@ export function VideoEditorComponent() {
 
           switch (image.effect) {
             case 'zoom-in':
-              scale = 1 + progress * 0.5 // Zoom in by 50% over the duration
+              scale = 1 + progress * 0.5
               break
             case 'zoom-out':
-              scale = 1.5 - progress * 0.5 // Start zoomed in by 50% and zoom out
+              scale = 1.5 - progress * 0.5
               break
             case 'fade':
               ctx.globalAlpha = progress
               break
           }
 
-          // Apply zoom effect
           if (image.effect === 'zoom-in' || image.effect === 'zoom-out') {
             const centerX = canvasRef.current!.width / 2
             const centerY = canvasRef.current!.height / 2
@@ -121,6 +129,9 @@ export function VideoEditorComponent() {
             ctx.scale(scale, scale)
             ctx.translate(-centerX, -centerY)
           }
+
+          // Apply the filter
+          applyFilter(ctx, image.filter)
 
           ctx.drawImage(img, 0, 0, canvasRef.current!.width, canvasRef.current!.height)
           ctx.restore()
@@ -254,6 +265,11 @@ export function VideoEditorComponent() {
                             </SelectItem>
                           </SelectContent>
                         </Select>
+                        <ImageFilters
+                          filter={image.filter}
+                          onFilterChange={(filter) => updateImageFilter(index, filter)}
+                          inputClasses={inputClasses}
+                        />
                         <div className="flex items-center space-x-2">
                           <Clock className="w-4 h-4" />
                           <Input
