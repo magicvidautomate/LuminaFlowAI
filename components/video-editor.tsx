@@ -74,6 +74,7 @@ export function VideoEditorComponent() {
   const audioCanvasRef = useRef<HTMLCanvasElement>(null)
   const [timelineScale, setTimelineScale] = useState(100); // pixels per second
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
+  const audioWaveformRef = useRef<ImageData | null>(null);
 
   const handleAudioUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
@@ -187,6 +188,14 @@ export function VideoEditorComponent() {
     }
 
     offscreenCtx.clearRect(0, 0, offscreenCanvasRef.current.width, offscreenCanvasRef.current.height)
+
+    // Redraw the audio waveform
+    if (audioCanvasRef.current && audioWaveformRef.current) {
+      const audioCtx = audioCanvasRef.current.getContext('2d');
+      if (audioCtx) {
+        audioCtx.putImageData(audioWaveformRef.current, 0, 0);
+      }
+    }
 
     for (const image of images) {
       if (time >= image.startTime && time < image.startTime + image.duration) {
@@ -374,7 +383,7 @@ export function VideoEditorComponent() {
       if (audioFile && audioCanvasRef.current) {
         drawAudioWaveform(audioFile, audioCanvasRef.current);
       }
-    }, [audioFile]);
+    }, [audioFile, timelineScale, isDarkMode]);
 
     // Add this useEffect hook to call zoomToFit when the timeline ref is available
     useEffect(() => {
@@ -412,6 +421,9 @@ export function VideoEditorComponent() {
         const barHeight = max * height
         ctx.fillRect(i, (height - barHeight) / 2, 1, barHeight)
       }
+
+      // Store the waveform image data
+      audioWaveformRef.current = ctx.getImageData(0, 0, width, height);
     }
 
     const handleTimelineClick = (event: React.MouseEvent<HTMLDivElement>) => {
