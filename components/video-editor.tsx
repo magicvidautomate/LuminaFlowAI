@@ -14,8 +14,9 @@ import { motion } from 'framer-motion'
 import { DragDropContext, Droppable, Draggable, DropResult, DroppableProvided, DraggableProvided } from 'react-beautiful-dnd'
 import { FFmpeg } from '@ffmpeg/ffmpeg'
 import { fetchFile } from '@ffmpeg/util'
+import { applyEffect, EffectParams } from './effects'
 
-type Effect = 'none' | 'zoom-in' | 'zoom-out' | 'fade'
+type Effect = 'none' | 'flash' | 'pulse' | 'spin' | 'vhs' | 'rotate' | 'vaporwave' | 'chromatic-aberration' | 'crash-zoom' | 'slow-zoom' | 'green-screen' | 'random'
 
 type ImageItem = {
   file: File
@@ -23,6 +24,7 @@ type ImageItem = {
   filter: Filter
   duration: number
   startTime: number
+  effectParams: EffectParams
 }
 
 const useAudio = (audioFile: File | null) => {
@@ -77,7 +79,8 @@ export function VideoEditorComponent() {
         effect: 'none' as Effect,
         filter: 'none' as Filter,
         duration: 5,
-        startTime: index * 5
+        startTime: index * 5,
+        effectParams: {}
       }))
       setImages([...images, ...newImages])
     }
@@ -86,7 +89,41 @@ export function VideoEditorComponent() {
   const updateImageEffect = (index: number, effect: Effect) => {
     const updatedImages = [...images]
     updatedImages[index].effect = effect
+    updatedImages[index].effectParams = getDefaultEffectParams(effect)
     setImages(updatedImages)
+  }
+
+  const updateEffectParam = (index: number, param: string, value: number | string) => {
+    const updatedImages = [...images]
+    updatedImages[index].effectParams[param] = value
+    setImages(updatedImages)
+  }
+
+  const getDefaultEffectParams = (effect: Effect): Record<string, number | string> => {
+    switch (effect) {
+      case 'flash':
+        return { intensity: 1, duration: 0.5 }
+      case 'pulse':
+        return { frequency: 1, amplitude: 0.5 }
+      case 'spin':
+        return { speed: 1, direction: 'clockwise' }
+      case 'vhs':
+        return { noiseIntensity: 0.5, scanLineOpacity: 0.5 }
+      case 'rotate':
+        return { angle: 0 }
+      case 'vaporwave':
+        return { colorIntensity: 1, glitchFrequency: 0.5 }
+      case 'chromatic-aberration':
+        return { intensity: 0.5 }
+      case 'crash-zoom':
+        return { direction: 'in', duration: 0.5, scale: 2 }
+      case 'slow-zoom':
+        return { startScale: 1, endScale: 1.5 }
+      case 'green-screen':
+        return { tolerance: 0.5, feather: 0.1 }
+      default:
+        return {}
+    }
   }
 
   const updateImageDuration = (index: number, duration: number) => {
@@ -130,32 +167,22 @@ export function VideoEditorComponent() {
           ctx.save()
           
           const progress = (currentTime - image.startTime) / image.duration
-          let scale = 1
 
-          switch (image.effect) {
-            case 'zoom-in':
-              scale = 1 + progress * 0.5
-              break
-            case 'zoom-out':
-              scale = 1.5 - progress * 0.5
-              break
-            case 'fade':
-              ctx.globalAlpha = progress
-              break
-          }
+          // Center the image
+          const scale = Math.max(canvasRef.current!.width / img.width, canvasRef.current!.height / img.height)
+          const x = (canvasRef.current!.width - img.width * scale) / 2
+          const y = (canvasRef.current!.height - img.height * scale) / 2
 
-          if (image.effect === 'zoom-in' || image.effect === 'zoom-out') {
-            const centerX = canvasRef.current!.width / 2
-            const centerY = canvasRef.current!.height / 2
-            ctx.translate(centerX, centerY)
-            ctx.scale(scale, scale)
-            ctx.translate(-centerX, -centerY)
-          }
+          // Apply the effect
+          ctx.translate(canvasRef.current!.width / 2, canvasRef.current!.height / 2)
+          applyEffect(ctx, image.effect, image.effectParams, progress)
+
+          // Draw the image
+          ctx.drawImage(img, -img.width * scale / 2, -img.height * scale / 2, img.width * scale, img.height * scale)
 
           // Apply the filter
           applyFilter(ctx, image.filter)
 
-          ctx.drawImage(img, 0, 0, canvasRef.current!.width, canvasRef.current!.height)
           ctx.restore()
         }
         img.src = URL.createObjectURL(image.file)
@@ -329,7 +356,7 @@ export function VideoEditorComponent() {
     const data = await ffmpeg.readFile('output.mp4')
 
     // Create a download link
-    const url = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }))
+    const url = URL.createObjectURL(new Blob([data], { type: 'video/mp4' }))
     const a = document.createElement('a')
     a.href = url
     a.download = 'output.mp4'
@@ -354,6 +381,28 @@ export function VideoEditorComponent() {
 
     setImages(updatedImages);
   };
+
+  const renderEffectParams = (image: ImageItem, index: number) => {
+    switch (image.effect) {
+      case 'flash':
+        return (
+          <>
+            <Slider
+              value={[image.effectParams.intensity as number]}
+              onValueChange={(value) => updateEffectParam(index, 'intensity', value[0])}
+              min={0}
+              max={2}
+              step={0.1}
+              className="w-full"
+            />
+            <span>Intensity: {image.effectParams.intensity}</span>
+          </>
+        )
+      // Add cases for other effects here
+      default:
+        return null
+    }
+  }
 
   return (
     <div className={`min-h-screen p-8 ${themeClasses}`}>
@@ -436,32 +485,21 @@ export function VideoEditorComponent() {
                                       <SelectValue placeholder="Effect" />
                                     </SelectTrigger>
                                     <SelectContent className={inputClasses}>
-                                      <SelectItem value="none">
-                                        <span className="flex items-center">
-                                          <ImageIcon className="w-4 h-4 mr-2" />
-                                          None
-                                        </span>
-                                      </SelectItem>
-                                      <SelectItem value="zoom-in">
-                                        <span className="flex items-center">
-                                          <ZoomIn className="w-4 h-4 mr-2" />
-                                          Zoom In
-                                        </span>
-                                      </SelectItem>
-                                      <SelectItem value="zoom-out">
-                                        <span className="flex items-center">
-                                          <ZoomOut className="w-4 h-4 mr-2" />
-                                          Zoom Out
-                                        </span>
-                                      </SelectItem>
-                                      <SelectItem value="fade">
-                                        <span className="flex items-center">
-                                          <ImageIcon className="w-4 h-4 mr-2" />
-                                          Fade
-                                        </span>
-                                      </SelectItem>
+                                      <SelectItem value="none">None</SelectItem>
+                                      <SelectItem value="flash">Flash</SelectItem>
+                                      <SelectItem value="pulse">Pulse</SelectItem>
+                                      <SelectItem value="spin">Spin</SelectItem>
+                                      <SelectItem value="vhs">VHS</SelectItem>
+                                      <SelectItem value="rotate">Rotate</SelectItem>
+                                      <SelectItem value="vaporwave">Vaporwave</SelectItem>
+                                      <SelectItem value="chromatic-aberration">Chromatic Aberration</SelectItem>
+                                      <SelectItem value="crash-zoom">Crash Zoom</SelectItem>
+                                      <SelectItem value="slow-zoom">Slow Zoom</SelectItem>
+                                      <SelectItem value="green-screen">Green Screen</SelectItem>
+                                      <SelectItem value="random">Random</SelectItem>
                                     </SelectContent>
                                   </Select>
+                                  {renderEffectParams(image, index)}
                                   <ImageFilters
                                     filter={image.filter}
                                     onFilterChange={(filter) => updateImageFilter(index, filter)}
