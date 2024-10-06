@@ -380,10 +380,10 @@ export function VideoEditorComponent() {
     }, [currentTime, followPlayhead, timelineScale]);
 
     useEffect(() => {
-      if (audioFile && audioCanvasRef.current) {
+      if (audioFile && audioCanvasRef.current && timelineScale > 0 && timelineDuration > 0) {
         drawAudioWaveform(audioFile, audioCanvasRef.current);
       }
-    }, [audioFile, timelineScale, isDarkMode]);
+    }, [audioFile, timelineScale, isDarkMode, timelineDuration]);
 
     // Add this useEffect hook to call zoomToFit when the timeline ref is available
     useEffect(() => {
@@ -401,9 +401,17 @@ export function VideoEditorComponent() {
       if (!ctx) return
 
       const audioDuration = audioBuffer.duration
-      canvas.width = Math.max(totalDuration, audioDuration) * timelineScale
-      const width = canvas.width
+      const width = Math.max(1, Math.ceil(Math.max(totalDuration, audioDuration) * timelineScale))
       const height = canvas.height
+
+      // Update canvas width
+      canvas.width = width
+
+      if (width <= 1 || height <= 0) {
+        console.warn('Invalid canvas dimensions:', width, height)
+        return
+      }
+
       const data = audioBuffer.getChannelData(0)
       const step = Math.ceil(data.length / width)
 
@@ -423,7 +431,7 @@ export function VideoEditorComponent() {
       }
 
       // Store the waveform image data
-      audioWaveformRef.current = ctx.getImageData(0, 0, width, height);
+      audioWaveformRef.current = ctx.getImageData(0, 0, width, height)
     }
 
     const handleTimelineClick = (event: React.MouseEvent<HTMLDivElement>) => {
