@@ -65,6 +65,9 @@ export function VideoEditorComponent() {
   const [images, setImages] = useState<ImageItem[]>([])
   const [currentTime, setCurrentTime] = useState(0)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const animationFrameRef = useRef<number | null>(null)
+  const lastRenderedTimeRef = useRef<number>(0)
   const audio = useAudio(audioFile)
   const [followPlayhead, setFollowPlayhead] = useState(true)  // Changed this line
   const timelineRef = useRef<HTMLDivElement>(null)
@@ -171,38 +174,50 @@ export function VideoEditorComponent() {
     setImages(updatedImages)
   }
 
-  const renderPreview = () => {
-    if (!canvasRef.current) return
+  const renderPreview = (time: number) => {
+    if (!canvasRef.current || !offscreenCanvasRef.current) return
 
     const ctx = canvasRef.current.getContext('2d')
-    if (!ctx) return
+    const offscreenCtx = offscreenCanvasRef.current.getContext('2d')
+    if (!ctx || !offscreenCtx) return
 
-    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height)
+    // Only render if the time has changed significantly
+    if (Math.abs(time - lastRenderedTimeRef.current) < 0.016) { // ~60fps
+      return
+    }
+
+    offscreenCtx.clearRect(0, 0, offscreenCanvasRef.current.width, offscreenCanvasRef.current.height)
 
     for (const image of images) {
-      if (currentTime >= image.startTime && currentTime < image.startTime + image.duration) {
+      if (time >= image.startTime && time < image.startTime + image.duration) {
         const img = new Image()
         img.onload = () => {
-          ctx.save()
-          
-          const progress = (currentTime - image.startTime) / image.duration
-
           // Center the image
-          const scale = Math.max(canvasRef.current!.width / img.width, canvasRef.current!.height / img.height)
-          const x = (canvasRef.current!.width - img.width * scale) / 2
-          const y = (canvasRef.current!.height - img.height * scale) / 2
+          const scale = Math.max(offscreenCanvasRef.current!.width / img.width, offscreenCanvasRef.current!.height / img.height)
+          const x = (offscreenCanvasRef.current!.width - img.width * scale) / 2
+          const y = (offscreenCanvasRef.current!.height - img.height * scale) / 2
+
+          offscreenCtx.save()
+          
+          const progress = (time - image.startTime) / image.duration
 
           // Apply the effect
-          ctx.translate(canvasRef.current!.width / 2, canvasRef.current!.height / 2)
-          applyEffect(ctx, image.effect, image.effectParams, progress)
+          offscreenCtx.translate(offscreenCanvasRef.current!.width / 2, offscreenCanvasRef.current!.height / 2)
+          applyEffect(offscreenCtx, image.effect, image.effectParams, progress)
 
           // Draw the image
-          ctx.drawImage(img, -img.width * scale / 2, -img.height * scale / 2, img.width * scale, img.height * scale)
+          offscreenCtx.drawImage(img, -img.width * scale / 2, -img.height * scale / 2, img.width * scale, img.height * scale)
 
           // Apply the filter
-          applyFilter(ctx, image.filter)
+          applyFilter(offscreenCtx, image.filter)
 
-          ctx.restore()
+          offscreenCtx.restore()
+
+          // Copy the offscreen canvas to the main canvas
+          ctx.clearRect(0, 0, canvasRef.current!.width, canvasRef.current!.height)
+          ctx.drawImage(offscreenCanvasRef.current!, 0, 0)
+
+          lastRenderedTimeRef.current = time
         }
         img.src = URL.createObjectURL(image.file)
         break
@@ -211,30 +226,43 @@ export function VideoEditorComponent() {
   }
 
   useEffect(() => {
-    renderPreview()
+    if (canvasRef.current) {
+      offscreenCanvasRef.current = document.createElement('canvas')
+      offscreenCanvasRef.current.width = canvasRef.current.width
+      offscreenCanvasRef.current.height = canvasRef.current.height
+    }
+  }, [])
+
+  useEffect(() => {
+    renderPreview(currentTime)
   }, [currentTime, images])
 
   const playPreview = () => {
     if (audio) {
       audio.currentTime = currentTime
       audio.play()
-      const animationFrame = () => {
+      const animatePreview = () => {
         if (audio.currentTime >= timelineDuration) {
           pausePreview()
           setCurrentTime(0)
           audio.currentTime = 0
         } else {
           setCurrentTime(audio.currentTime)
-          requestAnimationFrame(animationFrame)
+          renderPreview(audio.currentTime)
+          animationFrameRef.current = requestAnimationFrame(animatePreview)
         }
       }
-      requestAnimationFrame(animationFrame)
+      animationFrameRef.current = requestAnimationFrame(animatePreview)
     }
   }
 
   const pausePreview = () => {
     if (audio) {
       audio.pause()
+    }
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current)
+      animationFrameRef.current = null
     }
   }
 
