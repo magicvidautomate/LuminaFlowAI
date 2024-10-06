@@ -8,9 +8,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { PlayCircle, PauseCircle, Upload, Image as ImageIcon, Music, ZoomIn, ZoomOut, Clock, Sun, Moon, Rewind, RotateCcw, GripVertical, ChevronUp, ChevronDown, Crosshair, FastForward, Maximize } from 'lucide-react'
+import { PlayCircle, PauseCircle, Upload, Image as ImageIcon, Music, ZoomIn, ZoomOut, Clock, Sun, Moon, Rewind, RotateCcw, GripVertical, ChevronUp, ChevronDown, Crosshair, FastForward, Maximize, ChevronRight, ChevronLeft } from 'lucide-react'
 import { ImageFilters, Filter, applyFilter } from './image-filters'
-import { motion } from 'framer-motion'
+import { motion, useMotionValue, useTransform } from 'framer-motion'
 import { DragDropContext, Droppable, Draggable, DropResult, DroppableProvided, DraggableProvided } from 'react-beautiful-dnd'
 import { FFmpeg } from '@ffmpeg/ffmpeg'
 import { fetchFile } from '@ffmpeg/util'
@@ -70,6 +70,7 @@ export function VideoEditorComponent() {
   const timelineRef = useRef<HTMLDivElement>(null)
   const audioCanvasRef = useRef<HTMLCanvasElement>(null)
   const [timelineScale, setTimelineScale] = useState(100); // pixels per second
+  const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
 
   const handleAudioUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
@@ -136,15 +137,23 @@ export function VideoEditorComponent() {
     }
   }
 
-  const updateImageDuration = (index: number, duration: number) => {
-    const updatedImages = [...images]
-    updatedImages[index].duration = duration
-    // Update start times for all subsequent images
-    for (let i = index + 1; i < updatedImages.length; i++) {
-      updatedImages[i].startTime = updatedImages[i - 1].startTime + updatedImages[i - 1].duration
+  const updateImageDuration = (index: number, newDuration: number, fromStart: boolean) => {
+    const newImages = [...images];
+    const oldDuration = newImages[index].duration;
+    newImages[index].duration = Math.max(0.1, newDuration); // Ensure duration is at least 0.1 seconds
+
+    if (fromStart) {
+      const difference = oldDuration - newImages[index].duration;
+      newImages[index].startTime += difference;
     }
-    setImages(updatedImages)
-  }
+
+    // Recalculate start times for all subsequent images
+    for (let i = index + 1; i < newImages.length; i++) {
+      newImages[i].startTime = newImages[i - 1].startTime + newImages[i - 1].duration;
+    }
+
+    setImages(newImages);
+  };
 
   const updateImageStartTime = (index: number, startTime: number) => {
     const updatedImages = [...images]
@@ -298,6 +307,33 @@ export function VideoEditorComponent() {
     zoomToFit();
   }, [timelineDuration]);
 
+  const expandImageDuration = (index: number, amount: number) => {
+    const newImages = [...images];
+    newImages[index].duration += amount;
+
+    // Recalculate start times for all subsequent images
+    for (let i = index + 1; i < newImages.length; i++) {
+      newImages[i].startTime = newImages[i - 1].startTime + newImages[i - 1].duration;
+    }
+
+    setImages(newImages);
+  };
+
+  const fitImagesToAudio = () => {
+    if (audioFile && audioFile.duration && images.length > 0) {
+      const totalAudioDuration = audioFile.duration;
+      const imageDuration = totalAudioDuration / images.length;
+      
+      const newImages = images.map((image, index) => ({
+        ...image,
+        duration: imageDuration,
+        startTime: index * imageDuration
+      }));
+
+      setImages(newImages);
+    }
+  };
+
   const Timeline = () => {
     useEffect(() => {
       if (followPlayhead && timelineRef.current) {
@@ -362,6 +398,15 @@ export function VideoEditorComponent() {
       }
     };
 
+    const handleDrag = (index: number, fromStart: boolean) => (event: any, info: any) => {
+      const dragDistance = info.offset.x / timelineScale;
+      const currentImage = images[index];
+      const newDuration = fromStart
+        ? currentImage.duration - dragDistance
+        : currentImage.duration + dragDistance;
+      updateImageDuration(index, newDuration, fromStart);
+    };
+
     return (
       <div className="space-y-2">
         <div className="flex items-center justify-between">
@@ -375,6 +420,16 @@ export function VideoEditorComponent() {
             </Button>
             <Button onClick={zoomToFit} size="icon" variant="outline" className={buttonClasses}>
               <Maximize className="w-4 h-4" />
+            </Button>
+            <Button 
+              onClick={fitImagesToAudio} 
+              size="icon" 
+              variant="outline" 
+              className={buttonClasses}
+              disabled={!audioFile || images.length === 0}
+              title="Fit images to audio duration"
+            >
+              <Music className="w-4 h-4" />
             </Button>
             <Switch
               checked={followPlayhead}
@@ -395,7 +450,11 @@ export function VideoEditorComponent() {
             {images.map((image, index) => (
               <motion.div
                 key={index}
-                className={`absolute h-16 rounded ${isDarkMode ? 'bg-blue-600' : 'bg-blue-400'}`}
+                className={`absolute h-16 rounded ${
+                  isDarkMode ? 'bg-blue-600' : 'bg-blue-400'
+                } ${
+                  selectedImageIndex === index ? 'border-2 border-green-500' : ''
+                }`}
                 style={{
                   left: `${image.startTime * timelineScale}px`,
                   width: `${image.duration * timelineScale}px`,
@@ -403,12 +462,42 @@ export function VideoEditorComponent() {
                 }}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedImageIndex(index);
+                }}
               >
                 <img
                   src={URL.createObjectURL(image.file)}
                   alt={`Thumbnail ${index}`}
                   className="h-full w-full object-cover rounded"
                 />
+                <motion.div
+                  className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize"
+                  drag="x"
+                  dragConstraints={{ left: 0, right: 0 }}
+                  dragElastic={0}
+                  dragMomentum={false}
+                  onDrag={handleDrag(index, true)}
+                >
+                  <svg width="6" height="14" viewBox="0 0 6 14" className="absolute left-0 top-1/2 -translate-y-1/2">
+                    <path fillRule="evenodd" d="M1 -4.37114e-08C1.55228 -1.95703e-08 2 0.447715 2 1L2 13C2 13.5523 1.55228 14 0.999999 14C0.447715 14 -5.92389e-07 13.5523 -5.68248e-07 13L-4.37114e-08 1C-1.95703e-08 0.447715 0.447715 -6.78525e-08 1 -4.37114e-08Z" fill="currentColor"></path>
+                    <path fillRule="evenodd" d="M5 -4.37114e-08C5.55228 -1.95703e-08 6 0.447715 6 1L6 13C6 13.5523 5.55228 14 5 14C4.44771 14 4 13.5523 4 13L4 1C4 0.447715 4.44772 -6.78525e-08 5 -4.37114e-08Z" fill="currentColor"></path>
+                  </svg>
+                </motion.div>
+                <motion.div
+                  className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize"
+                  drag="x"
+                  dragConstraints={{ left: 0, right: 0 }}
+                  dragElastic={0}
+                  dragMomentum={false}
+                  onDrag={handleDrag(index, false)}
+                >
+                  <svg width="6" height="14" viewBox="0 0 6 14" className="absolute right-0 top-1/2 -translate-y-1/2">
+                    <path fillRule="evenodd" d="M1 -4.37114e-08C1.55228 -1.95703e-08 2 0.447715 2 1L2 13C2 13.5523 1.55228 14 0.999999 14C0.447715 14 -5.92389e-07 13.5523 -5.68248e-07 13L-4.37114e-08 1C-1.95703e-08 0.447715 0.447715 -6.78525e-08 1 -4.37114e-08Z" fill="currentColor"></path>
+                    <path fillRule="evenodd" d="M5 -4.37114e-08C5.55228 -1.95703e-08 6 0.447715 6 1L6 13C6 13.5523 5.55228 14 5 14C4.44771 14 4 13.5523 4 13L4 1C4 0.447715 4.44772 -6.78525e-08 5 -4.37114e-08Z" fill="currentColor"></path>
+                  </svg>
+                </motion.div>
               </motion.div>
             ))}
             <div
@@ -422,6 +511,29 @@ export function VideoEditorComponent() {
             />
           </div>
         </div>
+        {selectedImageIndex !== null && (
+          <div className="flex items-center justify-center space-x-2 mt-2">
+            <Button
+              onClick={() => expandImageDuration(selectedImageIndex, -0.1)}
+              size="sm"
+              variant="outline"
+              className={buttonClasses}
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            <span className="text-sm">
+              Duration: {images[selectedImageIndex].duration.toFixed(1)}s
+            </span>
+            <Button
+              onClick={() => expandImageDuration(selectedImageIndex, 0.1)}
+              size="sm"
+              variant="outline"
+              className={buttonClasses}
+            >
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          </div>
+        )}
       </div>
     );
   };
