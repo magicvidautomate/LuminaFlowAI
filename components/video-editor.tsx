@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { PlayCircle, PauseCircle, Upload, Image as ImageIcon, Music, ZoomIn, ZoomOut, Clock, Sun, Moon, Rewind, RotateCcw, GripVertical, ChevronUp, ChevronDown, Crosshair } from 'lucide-react'
+import { PlayCircle, PauseCircle, Upload, Image as ImageIcon, Music, ZoomIn, ZoomOut, Clock, Sun, Moon, Rewind, RotateCcw, GripVertical, ChevronUp, ChevronDown, Crosshair, FastForward } from 'lucide-react'
 import { ImageFilters, Filter, applyFilter } from './image-filters'
 import { motion } from 'framer-motion'
 import { DragDropContext, Droppable, Draggable, DropResult, DroppableProvided, DraggableProvided } from 'react-beautiful-dnd'
@@ -26,6 +26,9 @@ type ImageItem = {
   startTime: number
   effectParams: EffectParams
 }
+
+// Add this type at the top of the file, near other type definitions
+type AudioFileWithDuration = File & { duration?: number };
 
 const useAudio = (audioFile: File | null) => {
   const [audio, setAudio] = useState<HTMLAudioElement | null>(null)
@@ -58,17 +61,23 @@ const Switch = ({ checked, onCheckedChange }: { checked: boolean; onCheckedChang
 
 export function VideoEditorComponent() {
   const [isDarkMode, setIsDarkMode] = useState(true)
-  const [audioFile, setAudioFile] = useState<File | null>(null)
+  const [audioFile, setAudioFile] = useState<AudioFileWithDuration | null>(null)
   const [images, setImages] = useState<ImageItem[]>([])
   const [currentTime, setCurrentTime] = useState(0)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const audio = useAudio(audioFile)
-  const [followPlayhead, setFollowPlayhead] = useState(false)
+  const [followPlayhead, setFollowPlayhead] = useState(true)  // Changed this line
   const timelineRef = useRef<HTMLDivElement>(null)
+  const audioCanvasRef = useRef<HTMLCanvasElement>(null)
 
   const handleAudioUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
-      setAudioFile(event.target.files[0])
+      const file = event.target.files[0];
+      const audio = new Audio(URL.createObjectURL(file));
+      audio.onloadedmetadata = () => {
+        const fileWithDuration = Object.assign(file, { duration: audio.duration });
+        setAudioFile(fileWithDuration);
+      };
     }
   }
 
@@ -200,9 +209,14 @@ export function VideoEditorComponent() {
       audio.currentTime = currentTime
       audio.play()
       const animationFrame = () => {
-        setCurrentTime(audio.currentTime)
-        if (audio.paused) return
-        requestAnimationFrame(animationFrame)
+        if (audio.currentTime >= timelineDuration) {
+          pausePreview()
+          setCurrentTime(0)
+          audio.currentTime = 0
+        } else {
+          setCurrentTime(audio.currentTime)
+          requestAnimationFrame(animationFrame)
+        }
       }
       requestAnimationFrame(animationFrame)
     }
@@ -230,6 +244,15 @@ export function VideoEditorComponent() {
   }
 
   const totalDuration = images.reduce((sum, img) => Math.max(sum, img.startTime + img.duration), 0)
+  const timelineDuration = audioFile && audioFile.duration ? audioFile.duration : totalDuration;
+
+  const forwardPreview = () => {
+    const newTime = Math.min(currentTime + 5, timelineDuration) // Forward by 5 seconds
+    setCurrentTime(newTime)
+    if (audio) {
+      audio.currentTime = newTime
+    }
+  }
 
   const toggleTheme = () => {
     setIsDarkMode(!isDarkMode)
@@ -254,14 +277,63 @@ export function VideoEditorComponent() {
     : "bg-blue-500 hover:bg-blue-600 text-white"
 
   const Timeline = () => {
-    const timelineScale = 100 // pixels per second
+    const timelineScale = 100; // pixels per second
 
     useEffect(() => {
       if (followPlayhead && timelineRef.current) {
-        const scrollPosition = currentTime * timelineScale - timelineRef.current.clientWidth / 2
-        timelineRef.current.scrollLeft = scrollPosition
+        const scrollPosition = currentTime * timelineScale - timelineRef.current.clientWidth / 2;
+        timelineRef.current.scrollLeft = scrollPosition;
       }
-    }, [currentTime, followPlayhead])
+    }, [currentTime, followPlayhead]);
+
+    useEffect(() => {
+      if (audioFile && audioCanvasRef.current) {
+        drawAudioWaveform(audioFile, audioCanvasRef.current);
+      }
+    }, [audioFile]);
+
+    const drawAudioWaveform = async (file: AudioFileWithDuration, canvas: HTMLCanvasElement) => {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
+      const arrayBuffer = await file.arrayBuffer()
+      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer)
+
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return
+
+      const audioDuration = audioBuffer.duration
+      canvas.width = Math.max(totalDuration, audioDuration) * timelineScale
+      const width = canvas.width
+      const height = canvas.height
+      const data = audioBuffer.getChannelData(0)
+      const step = Math.ceil(data.length / width)
+
+      ctx.fillStyle = isDarkMode ? 'rgba(59, 130, 246, 0.5)' : 'rgba(37, 99, 235, 0.5)'
+      ctx.clearRect(0, 0, width, height)
+
+      for (let i = 0; i < width; i++) {
+        const sliceStart = Math.floor(i * step)
+        const sliceEnd = Math.floor((i + 1) * step)
+        let max = 0
+        for (let j = sliceStart; j < sliceEnd; j++) {
+          const absolute = Math.abs(data[j])
+          if (absolute > max) max = absolute
+        }
+        const barHeight = max * height
+        ctx.fillRect(i, (height - barHeight) / 2, 1, barHeight)
+      }
+    }
+
+    const handleTimelineClick = (event: React.MouseEvent<HTMLDivElement>) => {
+      if (timelineRef.current) {
+        const rect = timelineRef.current.getBoundingClientRect();
+        const offsetX = event.clientX - rect.left + timelineRef.current.scrollLeft;
+        const clickedTime = offsetX / timelineScale;
+        setCurrentTime(Math.min(clickedTime, timelineDuration));
+        if (audio) {
+          audio.currentTime = Math.min(clickedTime, timelineDuration);
+        }
+      }
+    };
 
     return (
       <div className="space-y-2">
@@ -275,15 +347,23 @@ export function VideoEditorComponent() {
             <Label htmlFor="follow-playhead" className="text-sm">Follow Playhead</Label>
           </div>
         </div>
-        <div ref={timelineRef} className="relative h-20 overflow-x-auto">
-          <div className="absolute top-0 left-0 h-full" style={{ width: `${totalDuration * timelineScale}px` }}>
+        <div 
+          ref={timelineRef} 
+          className="relative h-32 overflow-x-auto cursor-pointer" 
+          onClick={handleTimelineClick}
+        >
+          <div 
+            className="absolute top-0 left-0 h-full" 
+            style={{ width: `${timelineDuration * timelineScale}px` }}
+          >
             {images.map((image, index) => (
               <motion.div
                 key={index}
-                className={`absolute h-12 rounded ${isDarkMode ? 'bg-blue-600' : 'bg-blue-400'}`}
+                className={`absolute h-16 rounded ${isDarkMode ? 'bg-blue-600' : 'bg-blue-400'}`}
                 style={{
                   left: `${image.startTime * timelineScale}px`,
                   width: `${image.duration * timelineScale}px`,
+                  display: image.startTime < timelineDuration ? 'block' : 'none',
                 }}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
@@ -299,11 +379,16 @@ export function VideoEditorComponent() {
               className={`absolute top-0 w-0.5 h-full bg-red-500`}
               style={{ left: `${currentTime * timelineScale}px` }}
             />
+            <canvas
+              ref={audioCanvasRef}
+              className="absolute bottom-0 left-0 w-full h-16"
+              height={64}
+            />
           </div>
         </div>
       </div>
-    )
-  }
+    );
+  };
 
   const onDragEnd = (result: DropResult) => {
     if (!result.destination) {
@@ -566,13 +651,17 @@ export function VideoEditorComponent() {
                         <PauseCircle className="w-6 h-6" />
                         <span className="sr-only">Pause</span>
                       </Button>
+                      <Button onClick={forwardPreview} size="icon" variant="secondary" className={buttonClasses}>
+                        <FastForward className="w-6 h-6" />
+                        <span className="sr-only">Forward</span>
+                      </Button>
                     </div>
                   </div>
                   <div className="flex items-center space-x-2">
                     <Slider
                       value={[currentTime]}
                       onValueChange={(value) => setCurrentTime(value[0])}
-                      max={totalDuration}
+                      max={timelineDuration}
                       step={0.1}
                       className="flex-grow"
                     />
