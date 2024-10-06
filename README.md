@@ -1,5 +1,5 @@
 # LuminaFlowAI
-![WhatsApp Image 2024-10-05 at 18 24 30](https://github.com/user-attachments/assets/e912903e-497a-4ae9-b049-226a8913a0ab)
+<img width="1691" alt="Screenshot 2024-10-06 at 17 14 55" src="https://github.com/user-attachments/assets/6beb62a4-7d06-4afc-b139-78a23c5a91b1">
 
 LuminaFlowAI is an open-source, web-based video editor that allows users to create dynamic video sequences using images, audio, and various visual effects. Built with React and Next.js, LuminaFlowAI offers an intuitive interface for crafting engaging visual stories.
 
