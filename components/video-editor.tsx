@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { PlayCircle, PauseCircle, Upload, Image as ImageIcon, Music, ZoomIn, ZoomOut, Clock, Sun, Moon, Rewind, RotateCcw, GripVertical, ChevronUp, ChevronDown } from 'lucide-react'
+import { PlayCircle, PauseCircle, Upload, Image as ImageIcon, Music, ZoomIn, ZoomOut, Clock, Sun, Moon, Rewind, RotateCcw, GripVertical, ChevronUp, ChevronDown, Crosshair } from 'lucide-react'
 import { ImageFilters, Filter, applyFilter } from './image-filters'
 import { motion } from 'framer-motion'
 import { DragDropContext, Droppable, Draggable, DropResult, DroppableProvided, DraggableProvided } from 'react-beautiful-dnd'
@@ -38,6 +38,22 @@ const useAudio = (audioFile: File | null) => {
   return audio
 }
 
+// Add this custom Switch component at the top of the file, after the imports
+const Switch = ({ checked, onCheckedChange }: { checked: boolean; onCheckedChange: (checked: boolean) => void }) => (
+  <button
+    className={`relative inline-flex h-6 w-11 items-center rounded-full ${
+      checked ? 'bg-blue-600' : 'bg-gray-200'
+    }`}
+    onClick={() => onCheckedChange(!checked)}
+  >
+    <span
+      className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${
+        checked ? 'translate-x-6' : 'translate-x-1'
+      }`}
+    />
+  </button>
+);
+
 export function VideoEditorComponent() {
   const [isDarkMode, setIsDarkMode] = useState(true)
   const [audioFile, setAudioFile] = useState<File | null>(null)
@@ -45,6 +61,8 @@ export function VideoEditorComponent() {
   const [currentTime, setCurrentTime] = useState(0)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const audio = useAudio(audioFile)
+  const [followPlayhead, setFollowPlayhead] = useState(false)
+  const timelineRef = useRef<HTMLDivElement>(null)
 
   const handleAudioUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
@@ -211,31 +229,50 @@ export function VideoEditorComponent() {
   const Timeline = () => {
     const timelineScale = 100 // pixels per second
 
+    useEffect(() => {
+      if (followPlayhead && timelineRef.current) {
+        const scrollPosition = currentTime * timelineScale - timelineRef.current.clientWidth / 2
+        timelineRef.current.scrollLeft = scrollPosition
+      }
+    }, [currentTime, followPlayhead])
+
     return (
-      <div className="relative h-20 mt-4 overflow-x-auto">
-        <div className="absolute top-0 left-0 h-full" style={{ width: `${totalDuration * timelineScale}px` }}>
-          {images.map((image, index) => (
-            <motion.div
-              key={index}
-              className={`absolute h-12 rounded ${isDarkMode ? 'bg-blue-600' : 'bg-blue-400'}`}
-              style={{
-                left: `${image.startTime * timelineScale}px`,
-                width: `${image.duration * timelineScale}px`,
-              }}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              <img
-                src={URL.createObjectURL(image.file)}
-                alt={`Thumbnail ${index}`}
-                className="h-full w-full object-cover rounded"
-              />
-            </motion.div>
-          ))}
-          <div
-            className={`absolute top-0 w-0.5 h-full bg-red-500`}
-            style={{ left: `${currentTime * timelineScale}px` }}
-          />
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium">Timeline</span>
+          <div className="flex items-center space-x-2">
+            <Switch
+              checked={followPlayhead}
+              onCheckedChange={setFollowPlayhead}
+            />
+            <Label htmlFor="follow-playhead" className="text-sm">Follow Playhead</Label>
+          </div>
+        </div>
+        <div ref={timelineRef} className="relative h-20 overflow-x-auto">
+          <div className="absolute top-0 left-0 h-full" style={{ width: `${totalDuration * timelineScale}px` }}>
+            {images.map((image, index) => (
+              <motion.div
+                key={index}
+                className={`absolute h-12 rounded ${isDarkMode ? 'bg-blue-600' : 'bg-blue-400'}`}
+                style={{
+                  left: `${image.startTime * timelineScale}px`,
+                  width: `${image.duration * timelineScale}px`,
+                }}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <img
+                  src={URL.createObjectURL(image.file)}
+                  alt={`Thumbnail ${index}`}
+                  className="h-full w-full object-cover rounded"
+                />
+              </motion.div>
+            ))}
+            <div
+              className={`absolute top-0 w-0.5 h-full bg-red-500`}
+              style={{ left: `${currentTime * timelineScale}px` }}
+            />
+          </div>
         </div>
       </div>
     )
