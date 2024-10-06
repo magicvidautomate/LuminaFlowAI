@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { PlayCircle, PauseCircle, Upload, Image as ImageIcon, Music, ZoomIn, ZoomOut, Clock, Sun, Moon, Rewind, RotateCcw, GripVertical, ChevronUp, ChevronDown, Crosshair, FastForward } from 'lucide-react'
+import { PlayCircle, PauseCircle, Upload, Image as ImageIcon, Music, ZoomIn, ZoomOut, Clock, Sun, Moon, Rewind, RotateCcw, GripVertical, ChevronUp, ChevronDown, Crosshair, FastForward, Maximize } from 'lucide-react'
 import { ImageFilters, Filter, applyFilter } from './image-filters'
 import { motion } from 'framer-motion'
 import { DragDropContext, Droppable, Draggable, DropResult, DroppableProvided, DraggableProvided } from 'react-beautiful-dnd'
@@ -69,6 +69,7 @@ export function VideoEditorComponent() {
   const [followPlayhead, setFollowPlayhead] = useState(true)  // Changed this line
   const timelineRef = useRef<HTMLDivElement>(null)
   const audioCanvasRef = useRef<HTMLCanvasElement>(null)
+  const [timelineScale, setTimelineScale] = useState(100); // pixels per second
 
   const handleAudioUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
@@ -276,21 +277,47 @@ export function VideoEditorComponent() {
     ? "bg-blue-600 hover:bg-blue-700 text-white"
     : "bg-blue-500 hover:bg-blue-600 text-white"
 
-  const Timeline = () => {
-    const timelineScale = 100; // pixels per second
+  const zoomIn = () => {
+    setTimelineScale(prev => Math.min(prev * 1.2, 500)); // Limit max zoom
+  };
 
+  const zoomOut = () => {
+    setTimelineScale(prev => Math.max(prev / 1.2, 20)); // Limit min zoom
+  };
+
+  const zoomToFit = () => {
+    if (timelineRef.current) {
+      const containerWidth = timelineRef.current.clientWidth;
+      const newScale = containerWidth / timelineDuration;
+      setTimelineScale(newScale);
+    }
+  };
+
+  // Add this useEffect hook to call zoomToFit on mount and when timelineDuration changes
+  useEffect(() => {
+    zoomToFit();
+  }, [timelineDuration]);
+
+  const Timeline = () => {
     useEffect(() => {
       if (followPlayhead && timelineRef.current) {
         const scrollPosition = currentTime * timelineScale - timelineRef.current.clientWidth / 2;
         timelineRef.current.scrollLeft = scrollPosition;
       }
-    }, [currentTime, followPlayhead]);
+    }, [currentTime, followPlayhead, timelineScale]);
 
     useEffect(() => {
       if (audioFile && audioCanvasRef.current) {
         drawAudioWaveform(audioFile, audioCanvasRef.current);
       }
     }, [audioFile]);
+
+    // Add this useEffect hook to call zoomToFit when the timeline ref is available
+    useEffect(() => {
+      if (timelineRef.current) {
+        zoomToFit();
+      }
+    }, [timelineRef.current]);
 
     const drawAudioWaveform = async (file: AudioFileWithDuration, canvas: HTMLCanvasElement) => {
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
@@ -340,6 +367,15 @@ export function VideoEditorComponent() {
         <div className="flex items-center justify-between">
           <span className="text-sm font-medium">Timeline</span>
           <div className="flex items-center space-x-2">
+            <Button onClick={zoomOut} size="icon" variant="outline" className={buttonClasses}>
+              <ZoomOut className="w-4 h-4" />
+            </Button>
+            <Button onClick={zoomIn} size="icon" variant="outline" className={buttonClasses}>
+              <ZoomIn className="w-4 h-4" />
+            </Button>
+            <Button onClick={zoomToFit} size="icon" variant="outline" className={buttonClasses}>
+              <Maximize className="w-4 h-4" />
+            </Button>
             <Switch
               checked={followPlayhead}
               onCheckedChange={setFollowPlayhead}
