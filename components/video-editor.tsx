@@ -489,6 +489,12 @@ export function VideoEditorComponent() {
     }
   }
 
+  const formatTime = (time: number) => {
+    const minutes = Math.floor(time / 60);
+    const seconds = Math.floor(time % 60);
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  };
+
   return (
     <div className={`min-h-screen p-8 ${themeClasses}`}>
       <div className={`container mx-auto backdrop-blur-sm rounded-xl shadow-lg p-8 ${cardClasses}`}>
@@ -665,13 +671,15 @@ export function VideoEditorComponent() {
                       step={0.1}
                       className="flex-grow"
                     />
-                    <span className="text-sm font-medium w-16">{currentTime.toFixed(1)}s</span>
+                    <span className="text-sm font-medium w-32">
+                      {formatTime(currentTime)} / {formatTime(timelineDuration)}
+                    </span>
                   </div>
+                  <Timeline />
+                  <Button onClick={exportVideo} className={buttonClasses}>
+                    Export Video
+                  </Button>
                 </div>
-                <Timeline />
-                <Button onClick={exportVideo} className={buttonClasses}>
-                  Export Video
-                </Button>
               </CardContent>
             </Card>
           </div>
