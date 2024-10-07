@@ -83,21 +83,36 @@ export function VideoEditorComponent() {
       audio.onloadedmetadata = () => {
         const fileWithDuration = Object.assign(file, { duration: audio.duration });
         setAudioFile(fileWithDuration);
+        
+        // Fit images to audio duration if images are already uploaded
+        if (images.length > 0) {
+          fitImagesToAudio(fileWithDuration.duration);
+        }
       };
     }
   }
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files) {
-      const newImages = Array.from(event.target.files).map((file, index) => ({
+      const newImages = Array.from(event.target.files).map((file) => ({
         file,
         effect: 'none' as Effect,
         filter: 'none' as Filter,
         duration: 5,
-        startTime: index * 5,
+        startTime: 0,
         effectParams: {}
-      }))
-      setImages([...images, ...newImages])
+      }));
+
+      // If audio is already uploaded, fit images to audio duration
+      if (audioFile && audioFile.duration) {
+        const imageDuration = audioFile.duration / newImages.length;
+        newImages.forEach((image, index) => {
+          image.duration = imageDuration;
+          image.startTime = index * imageDuration;
+        });
+      }
+
+      setImages([...images, ...newImages]);
     }
   }
 
@@ -356,10 +371,9 @@ export function VideoEditorComponent() {
     setImages(newImages);
   };
 
-  const fitImagesToAudio = () => {
-    if (audioFile && audioFile.duration && images.length > 0) {
-      const totalAudioDuration = audioFile.duration;
-      const imageDuration = totalAudioDuration / images.length;
+  const fitImagesToAudio = (audioDuration: number) => {
+    if (audioDuration && images.length > 0) {
+      const imageDuration = audioDuration / images.length;
       
       const newImages = images.map((image, index) => ({
         ...image,
